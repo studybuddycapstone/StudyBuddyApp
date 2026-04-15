@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { getProfile, saveProfile } from "../data/dataService";
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [major, setMajor] = useState("");
@@ -12,18 +12,20 @@ export default function ProfilePage() {
   const [classes, setClasses] = useState<string[]>([]);
   const [newClass, setNewClass] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    const profile = getProfile(user.uid);
-    if (profile) {
-      setFirstName(profile.firstName);
-      setLastName(profile.lastName);
-      setMajor(profile.major);
-      setBio(profile.bio);
-      setProjects(profile.projects);
-      setClasses(profile.classes);
-    }
+    getProfile(user.uid).then((profile) => {
+      if (profile) {
+        setFirstName(profile.firstName);
+        setLastName(profile.lastName);
+        setMajor(profile.major);
+        setBio(profile.bio);
+        setProjects(profile.projects);
+        setClasses(profile.classes);
+      }
+    });
   }, [user]);
 
   const handleAddClass = () => {
@@ -37,10 +39,11 @@ export default function ProfilePage() {
     setClasses(classes.filter((c) => c !== cls));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    saveProfile(user.uid, {
+    setSaving(true);
+    await saveProfile(user.uid, {
       firstName,
       lastName,
       major,
@@ -48,6 +51,8 @@ export default function ProfilePage() {
       projects,
       classes,
     });
+    await refreshUser();
+    setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -178,9 +183,10 @@ export default function ProfilePage() {
           <div className="flex items-center gap-4">
             <button
               type="submit"
-              className="px-8 py-3 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors cursor-pointer"
+              disabled={saving}
+              className="px-8 py-3 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors cursor-pointer disabled:opacity-50"
             >
-              Save Profile
+              {saving ? "Saving..." : "Save Profile"}
             </button>
             {saved && (
               <span className="text-green-600 text-sm font-medium">

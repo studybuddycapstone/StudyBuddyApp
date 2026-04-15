@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getConnectionsForUser } from "../data/dataService";
+import type { Connection } from "../types";
 
 const cards = [
   {
@@ -38,8 +40,13 @@ const cards = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [connections, setConnections] = useState<Connection[]>([]);
 
-  const connections = user ? getConnectionsForUser(user.uid) : [];
+  useEffect(() => {
+    if (!user) return;
+    getConnectionsForUser(user.uid).then(setConnections);
+  }, [user]);
+
   const activeCount = connections.filter((c) => c.status === "active").length;
   const pendingCount = connections.filter(
     (c) => c.status === "pending" && c.requesterId !== user?.uid

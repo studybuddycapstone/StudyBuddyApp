@@ -1,18 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getMatches, sendConnectionRequest } from "../data/dataService";
+import type { UserProfile } from "../types";
 
 export default function Matches() {
   const { user } = useAuth();
+  const [matches, setMatches] = useState<(UserProfile & { sharedClasses: string[] })[]>([]);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
-  const matches = user ? getMatches(user.uid) : [];
-
-  const handleConnect = (matchUid: string) => {
+  useEffect(() => {
     if (!user) return;
-    sendConnectionRequest(user.uid, matchUid);
+    setLoading(true);
+    getMatches(user.uid).then((result) => {
+      setMatches(result);
+      setLoading(false);
+    });
+  }, [user]);
+
+  const handleConnect = async (matchUid: string) => {
+    if (!user) return;
+    await sendConnectionRequest(user.uid, matchUid);
     setSentRequests(new Set([...sentRequests, matchUid]));
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-green-50 flex items-center justify-center">
+        <p className="text-gray-500">Loading matches...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-green-50">

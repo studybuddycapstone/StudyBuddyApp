@@ -5,10 +5,17 @@ import {
   sendEmailVerification,
   signOut,
 } from "firebase/auth";
+import { createProfile } from "./firestore";
 
-export const signUp = async (email: string, password: string) => {
+export const signUp = async (
+  email: string,
+  password: string,
+  firstName: string,
+  lastName: string
+) => {
   if (!auth) throw new Error("Firebase not configured. Use demo mode instead.");
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  await createProfile(userCredential.user.uid, { email, firstName, lastName });
   await sendEmailVerification(userCredential.user);
   return userCredential.user;
 };

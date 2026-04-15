@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -7,13 +7,35 @@ import {
   acceptConnection,
   declineConnection,
 } from "../data/dataService";
+import type { Connection, UserProfile } from "../types";
 
 export default function Connections() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [, forceUpdate] = useState(0);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [profileCache, setProfileCache] = useState<Record<string, UserProfile>>({});
+  const [loading, setLoading] = useState(true);
 
-  const connections = user ? getConnectionsForUser(user.uid) : [];
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    getConnectionsForUser(user.uid).then(async (conns) => {
+      setConnections(conns);
+
+      // Fetch profiles for all other participants
+      const otherUids = conns
+        .flatMap((c) => c.participants)
+        .filter((uid) => uid !== user.uid);
+      const unique = [...new Set(otherUids)];
+      const profiles = await Promise.all(unique.map((uid) => getProfile(uid)));
+      const cache: Record<string, UserProfile> = {};
+      profiles.forEach((p) => {
+        if (p) cache[p.uid] = p;
+      });
+      setProfileCache(cache);
+      setLoading(false);
+    });
+  }, [user]);
 
   const incoming = connections.filter(
     (c) => c.status === "pending" && c.requesterId !== user?.uid
@@ -25,18 +47,28 @@ export default function Connections() {
 
   const getOtherUser = (participants: [string, string]) => {
     const otherId = participants.find((p) => p !== user?.uid) || "";
-    return getProfile(otherId);
+    return profileCache[otherId];
   };
 
-  const handleAccept = (connectionId: string) => {
-    acceptConnection(connectionId);
-    forceUpdate((n) => n + 1);
+  const handleAccept = async (connectionId: string) => {
+    await acceptConnection(connectionId);
+    setConnections((prev) =>
+      prev.map((c) => (c.id === connectionId ? { ...c, status: "active" } : c))
+    );
   };
 
-  const handleDecline = (connectionId: string) => {
-    declineConnection(connectionId);
-    forceUpdate((n) => n + 1);
+  const handleDecline = async (connectionId: string) => {
+    await declineConnection(connectionId);
+    setConnections((prev) => prev.filter((c) => c.id !== connectionId));
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-green-50 flex items-center justify-center">
+        <p className="text-gray-500">Loading connections...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-green-50">

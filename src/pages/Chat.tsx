@@ -7,7 +7,7 @@ import {
   getConnectionsForUser,
   getProfile,
 } from "../data/dataService";
-import type { Message } from "../types";
+import type { Message, Connection, UserProfile } from "../types";
 
 export default function Chat() {
   const { connectionId } = useParams<{ connectionId: string }>();
@@ -15,30 +15,44 @@ export default function Chat() {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [connection, setConnection] = useState<Connection | undefined>();
+  const [otherUser, setOtherUser] = useState<UserProfile | undefined>();
+  const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const connections = user ? getConnectionsForUser(user.uid) : [];
-  const connection = connections.find(
-    (c) => c.id === connectionId && c.status === "active"
-  );
-
-  const otherUserId = connection?.participants.find((p) => p !== user?.uid);
-  const otherUser = otherUserId ? getProfile(otherUserId) : undefined;
-
   useEffect(() => {
-    if (!connectionId) return;
-    setMessages(getMessages(connectionId));
-  }, [connectionId]);
+    if (!user || !connectionId) return;
+    setLoading(true);
+
+    (async () => {
+      const conns = await getConnectionsForUser(user.uid);
+      const conn = conns.find(
+        (c) => c.id === connectionId && c.status === "active"
+      );
+      setConnection(conn);
+
+      if (conn) {
+        const otherUserId = conn.participants.find((p) => p !== user.uid);
+        if (otherUserId) {
+          const profile = await getProfile(otherUserId);
+          setOtherUser(profile);
+        }
+        const msgs = await getMessages(connectionId);
+        setMessages(msgs);
+      }
+      setLoading(false);
+    })();
+  }, [user, connectionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user || !connectionId) return;
 
-    const msg = sendMessage(connectionId, user.uid, newMessage.trim());
+    const msg = await sendMessage(connectionId, user.uid, newMessage.trim());
     setMessages([...messages, msg]);
     setNewMessage("");
   };
@@ -62,6 +76,14 @@ export default function Chat() {
     }
     return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-green-50 flex items-center justify-center">
+        <p className="text-gray-500">Loading chat...</p>
+      </div>
+    );
+  }
 
   if (!connection || !otherUser) {
     return (

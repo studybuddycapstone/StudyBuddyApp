@@ -1,4 +1,16 @@
 import type { UserProfile, Connection, Message } from "../types";
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+import {
+  fetchProfile,
+  fetchAllProfiles,
+  updateProfile,
+  fetchConnectionsForUser,
+  createConnectionRequest,
+  acceptConnectionRequest,
+  declineConnectionRequest,
+  fetchMessages,
+  createMessage,
+} from "../firebase/firestore";
 import {
   seedProfiles,
   seedConnections,
@@ -6,35 +18,51 @@ import {
   DEMO_USER_UID,
 } from "./seedData";
 
-let profiles = [...seedProfiles];
-let connections = [...seedConnections];
-let messages = [...seedMessages];
+// --- Local demo state (only used in demo mode) ---
+
+let demoProfiles = [...seedProfiles];
+let demoConnections = [...seedConnections];
+let demoMessages = [...seedMessages];
+
+export { DEMO_USER_UID };
 
 // --- Profile operations ---
 
-export function getCurrentUserId(): string {
-  return DEMO_USER_UID;
+export async function getProfile(uid: string): Promise<UserProfile | undefined> {
+  if (hasFirebaseConfig) {
+    return fetchProfile(uid);
+  }
+  return demoProfiles.find((p) => p.uid === uid);
 }
 
-export function getProfile(uid: string): UserProfile | undefined {
-  return profiles.find((p) => p.uid === uid);
+export async function getAllProfiles(): Promise<UserProfile[]> {
+  if (hasFirebaseConfig) {
+    return fetchAllProfiles();
+  }
+  return demoProfiles;
 }
 
-export function getAllProfiles(): UserProfile[] {
-  return profiles;
-}
-
-export function saveProfile(uid: string, data: Partial<UserProfile>): void {
-  const idx = profiles.findIndex((p) => p.uid === uid);
+export async function saveProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
+  if (hasFirebaseConfig) {
+    await updateProfile(uid, data);
+    return;
+  }
+  const idx = demoProfiles.findIndex((p) => p.uid === uid);
   if (idx !== -1) {
-    profiles[idx] = { ...profiles[idx], ...data };
+    demoProfiles[idx] = { ...demoProfiles[idx], ...data };
   }
 }
 
 // --- Matching ---
 
-export function getMatches(uid: string): (UserProfile & { sharedClasses: string[] })[] {
-  const currentUser = getProfile(uid);
+export async function getMatches(
+  uid: string
+): Promise<(UserProfile & { sharedClasses: string[] })[]> {
+  const [currentUser, allProfiles, connections] = await Promise.all([
+    getProfile(uid),
+    getAllProfiles(),
+    getConnectionsForUser(uid),
+  ]);
   if (!currentUser) return [];
 
   const connectedUids = new Set(
@@ -43,7 +71,7 @@ export function getMatches(uid: string): (UserProfile & { sharedClasses: string[
       .flatMap((c) => c.participants)
   );
 
-  return profiles
+  return allProfiles
     .filter((p) => p.uid !== uid && !connectedUids.has(p.uid))
     .map((p) => ({
       ...p,
@@ -55,12 +83,21 @@ export function getMatches(uid: string): (UserProfile & { sharedClasses: string[
 
 // --- Connection operations ---
 
-export function getConnectionsForUser(uid: string): Connection[] {
-  return connections.filter((c) => c.participants.includes(uid));
+export async function getConnectionsForUser(uid: string): Promise<Connection[]> {
+  if (hasFirebaseConfig) {
+    return fetchConnectionsForUser(uid);
+  }
+  return demoConnections.filter((c) => c.participants.includes(uid));
 }
 
-export function sendConnectionRequest(requesterId: string, receiverId: string): Connection {
-  const existing = connections.find(
+export async function sendConnectionRequest(
+  requesterId: string,
+  receiverId: string
+): Promise<Connection> {
+  if (hasFirebaseConfig) {
+    return createConnectionRequest(requesterId, receiverId);
+  }
+  const existing = demoConnections.find(
     (c) =>
       c.participants.includes(requesterId) &&
       c.participants.includes(receiverId)
@@ -74,28 +111,46 @@ export function sendConnectionRequest(requesterId: string, receiverId: string): 
     status: "pending",
     createdAt: Date.now(),
   };
-  connections.push(conn);
+  demoConnections.push(conn);
   return conn;
 }
 
-export function acceptConnection(connectionId: string): void {
-  const conn = connections.find((c) => c.id === connectionId);
+export async function acceptConnection(connectionId: string): Promise<void> {
+  if (hasFirebaseConfig) {
+    await acceptConnectionRequest(connectionId);
+    return;
+  }
+  const conn = demoConnections.find((c) => c.id === connectionId);
   if (conn) conn.status = "active";
 }
 
-export function declineConnection(connectionId: string): void {
-  connections = connections.filter((c) => c.id !== connectionId);
+export async function declineConnection(connectionId: string): Promise<void> {
+  if (hasFirebaseConfig) {
+    await declineConnectionRequest(connectionId);
+    return;
+  }
+  demoConnections = demoConnections.filter((c) => c.id !== connectionId);
 }
 
 // --- Message operations ---
 
-export function getMessages(connectionId: string): Message[] {
-  return messages
+export async function getMessages(connectionId: string): Promise<Message[]> {
+  if (hasFirebaseConfig) {
+    return fetchMessages(connectionId);
+  }
+  return demoMessages
     .filter((m) => m.connectionId === connectionId)
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
-export function sendMessage(connectionId: string, senderId: string, text: string): Message {
+export async function sendMessage(
+  connectionId: string,
+  senderId: string,
+  text: string
+): Promise<Message> {
+  if (hasFirebaseConfig) {
+    return createMessage(connectionId, senderId, text);
+  }
   const msg: Message = {
     id: `msg-${Date.now()}`,
     connectionId,
@@ -103,6 +158,6 @@ export function sendMessage(connectionId: string, senderId: string, text: string
     text,
     timestamp: Date.now(),
   };
-  messages.push(msg);
+  demoMessages.push(msg);
   return msg;
 }
