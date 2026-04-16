@@ -22,26 +22,42 @@ export default function Chat() {
 
   useEffect(() => {
     if (!user || !connectionId) return;
+
+    let isMounted = true; // Prevents memory leaks if you leave the page while loading
     setLoading(true);
 
-    (async () => {
-      const conns = await getConnectionsForUser(user.uid);
-      const conn = conns.find(
-        (c) => c.id === connectionId && c.status === "active"
-      );
-      setConnection(conn);
+    const loadChatData = async () => {
+      try {
+        const conns = await getConnectionsForUser(user.uid);
+        const conn = conns.find(
+          (c) => c.id === connectionId && c.status === "active"
+        );
+        
+        if (!isMounted) return;
+        setConnection(conn);
 
-      if (conn) {
-        const otherUserId = conn.participants.find((p) => p !== user.uid);
-        if (otherUserId) {
-          const profile = await getProfile(otherUserId);
-          setOtherUser(profile);
+        if (conn) {
+          const otherUserId = conn.participants.find((p) => p !== user.uid);
+          if (otherUserId) {
+            const profile = await getProfile(otherUserId);
+            if (isMounted && profile) setOtherUser(profile);
+          }
+          const msgs = await getMessages(connectionId);
+          if (isMounted) setMessages(msgs);
         }
-        const msgs = await getMessages(connectionId);
-        setMessages(msgs);
+      } catch (error) {
+        console.error("🔥 CRITICAL FIREBASE ERROR LOAD CHAT:", error);
+      } finally {
+        // FIX: infinite loading spinner
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
-    })();
+    };
+
+    loadChatData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, connectionId]);
 
   useEffect(() => {
@@ -52,9 +68,14 @@ export default function Chat() {
     e.preventDefault();
     if (!newMessage.trim() || !user || !connectionId) return;
 
-    const msg = await sendMessage(connectionId, user.uid, newMessage.trim());
-    setMessages([...messages, msg]);
-    setNewMessage("");
+    try {
+      const msg = await sendMessage(connectionId, user.uid, newMessage.trim());
+      setMessages([...messages, msg]);
+      setNewMessage("");
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      alert("Failed to send message. Check console for details.");
+    }
   };
 
   const formatTime = (timestamp: number) => {
@@ -89,7 +110,7 @@ export default function Chat() {
     return (
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
         <div className="bg-white rounded-xl p-8 shadow-sm text-center">
-          <p className="text-gray-500 mb-4">Connection not found.</p>
+          <p className="text-gray-500 mb-4">Connection not found or is not active.</p>
           <button
             onClick={() => navigate("/connections")}
             className="px-6 py-2 bg-green-600 text-white font-medium rounded-full hover:bg-green-700 transition-colors cursor-pointer"

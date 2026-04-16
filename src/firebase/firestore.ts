@@ -14,7 +14,6 @@ import {
 import { db } from "./firebaseConfig";
 import type { UserProfile, Connection, Message } from "../types";
 
-
 export async function createProfile(
   uid: string,
   data: { email: string; firstName: string; lastName: string }
