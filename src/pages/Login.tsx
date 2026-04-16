@@ -11,8 +11,11 @@ export default function Login() {
   const navigate = useNavigate();
   const { loginAsDemo } = useAuth();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // FIX 1: Allow this to handle both Form submits and Button clicks
+  const handleLogin = async (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent double-clicks
+    
     setError("");
     setLoading(true);
     try {
@@ -25,9 +28,17 @@ export default function Login() {
     }
   };
 
-  const handleDemoLogin = () => {
-    loginAsDemo();
-    navigate("/dashboard");
+  // FIX 2: Make this async and await the login before navigating!
+  const handleDemoLogin = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      // Assuming loginAsDemo is an async function in your context
+      await loginAsDemo();
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Demo login failed", err);
+      setError("Failed to launch demo mode.");
+    }
   };
 
   return (
@@ -76,8 +87,12 @@ export default function Login() {
               />
             </div>
 
+            {/* FIX 1 APPLIED: Added onClick={handleLogin} here to bypass 
+              the disabled-button browser bug 
+            */}
             <button
               type="submit"
+              onClick={handleLogin} 
               disabled={loading}
               className="w-full py-3 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors disabled:opacity-50 cursor-pointer"
             >
@@ -95,6 +110,7 @@ export default function Login() {
           </div>
 
           <button
+            type="button"
             onClick={handleDemoLogin}
             className="w-full py-3 bg-green-50 text-green-700 font-semibold rounded-full hover:bg-green-100 transition-colors border border-green-200 cursor-pointer"
           >

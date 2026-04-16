@@ -11,7 +11,7 @@ interface AuthContextType {
   loading: boolean;
   isDemo: boolean;
   refreshUser: () => Promise<void>;
-  loginAsDemo: () => void;
+  loginAsDemo: () => Promise<void>; // CHANGED: Now returns a Promise
   logoutUser: () => void;
 }
 
@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isDemo: false,
   refreshUser: async () => {},
-  loginAsDemo: () => {},
+  loginAsDemo: async () => {}, // CHANGED: Must be async here too
   logoutUser: () => {},
 });
 
@@ -83,14 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe?.();
   }, []);
 
-  const loginAsDemo = () => {
-    getProfile(DEMO_USER_UID).then((profile) => {
-      if (profile) {
-        setUser(profile);
-        setIsDemo(true);
-        localStorage.setItem("studybuddy_demo", "true");
-      }
-    });
+  // CHANGED: Made this async and used 'await' so the Login page actually waits for it to finish!
+  const loginAsDemo = async () => {
+    const profile = await getProfile(DEMO_USER_UID);
+    if (profile) {
+      setUser(profile);
+      setIsDemo(true);
+      localStorage.setItem("studybuddy_demo", "true");
+    }
   };
 
   const logoutUser = () => {
