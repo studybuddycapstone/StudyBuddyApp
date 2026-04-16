@@ -14,7 +14,6 @@ import {
 import { db } from "./firebaseConfig";
 import type { UserProfile, Connection, Message } from "../types";
 
-// --- Profile operations ---
 
 export async function createProfile(
   uid: string,
@@ -54,7 +53,6 @@ export async function updateProfile(
   await updateDoc(doc(db, "users", uid), data);
 }
 
-// --- Connection operations ---
 
 export async function fetchConnectionsForUser(uid: string): Promise<Connection[]> {
   if (!db) return [];
@@ -70,7 +68,6 @@ export async function createConnectionRequest(
 ): Promise<Connection> {
   if (!db) throw new Error("Firestore not available");
 
-  // Check for existing connection
   const existing = await fetchConnectionsForUser(requesterId);
   const found = existing.find(
     (c) => c.participants.includes(requesterId) && c.participants.includes(receiverId)
@@ -97,7 +94,6 @@ export async function declineConnectionRequest(connectionId: string): Promise<vo
   await deleteDoc(doc(db, "connections", connectionId));
 }
 
-// --- Message operations ---
 
 export async function fetchMessages(connectionId: string): Promise<Message[]> {
   if (!db) return [];

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, hasFirebaseConfig } from "../firebase/firebaseConfig";
 import { getProfile } from "../data/dataService";
-import { DEMO_USER_UID } from "../data/seedData";
+import { DEMO_USER_UID, seedProfiles } from "../data/seedData"; 
 import type { UserProfile } from "../types";
 
 interface AuthContextType {
@@ -11,7 +11,7 @@ interface AuthContextType {
   loading: boolean;
   isDemo: boolean;
   refreshUser: () => Promise<void>;
-  loginAsDemo: () => Promise<void>; // CHANGED: Now returns a Promise
+  loginAsDemo: () => Promise<void>;
   logoutUser: () => void;
 }
 
@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isDemo: false,
   refreshUser: async () => {},
-  loginAsDemo: async () => {}, // CHANGED: Must be async here too
+  loginAsDemo: async () => {},
   logoutUser: () => {},
 });
 
@@ -65,31 +65,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    // Check for demo session
+    // Check for demo session on page reload
     const demoSession = localStorage.getItem("studybuddy_demo");
     if (demoSession === "true") {
+      // Try DB first, fallback to seedData
       getProfile(DEMO_USER_UID).then((profile) => {
-        if (profile) {
-          setUser(profile);
+        const activeProfile = profile || seedProfiles.find(p => p.uid === DEMO_USER_UID);
+        if (activeProfile) {
+          setUser(activeProfile);
           setIsDemo(true);
         }
         setLoading(false);
       });
     } else if (!hasFirebaseConfig) {
-      // No Firebase and no demo session - stop loading
       setLoading(false);
     }
 
     return () => unsubscribe?.();
   }, []);
 
-  // CHANGED: Made this async and used 'await' so the Login page actually waits for it to finish!
   const loginAsDemo = async () => {
-    const profile = await getProfile(DEMO_USER_UID);
-    if (profile) {
-      setUser(profile);
-      setIsDemo(true);
-      localStorage.setItem("studybuddy_demo", "true");
+    try {
+      // 1. Try to get it from the live Firestore database
+      let profile = await getProfile(DEMO_USER_UID);
+      
+      // 2. If it's not in the DB, find it in your seedProfiles array!
+      // FIX: Removed '|| null' because .find() returns undefined naturally,
+      // which aligns with the TypeScript inferred type from getProfile()
+      if (!profile) {
+        console.warn("Demo user not in DB. Falling back to seedData.");
+        profile = seedProfiles.find(p => p.uid === DEMO_USER_UID);
+      }
+
+      // 3. Set the user and route to dashboard
+      if (profile) {
+        setUser(profile);
+        setIsDemo(true);
+        localStorage.setItem("studybuddy_demo", "true");
+      } else {
+        throw new Error("Demo user missing from both DB and seedData!");
+      }
+      
+    } catch (error) {
+      console.error("Error during Demo Login:", error);
+      throw error;
     }
   };
 

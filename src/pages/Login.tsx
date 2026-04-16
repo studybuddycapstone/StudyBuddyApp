@@ -11,7 +11,6 @@ export default function Login() {
   const navigate = useNavigate();
   const { loginAsDemo } = useAuth();
 
-  // FIX 1: Allow this to handle both Form submits and Button clicks
   const handleLogin = async (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
     if (loading) return; // Prevent double-clicks
@@ -28,11 +27,9 @@ export default function Login() {
     }
   };
 
-  // FIX 2: Make this async and await the login before navigating!
   const handleDemoLogin = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
-      // Assuming loginAsDemo is an async function in your context
       await loginAsDemo();
       navigate("/dashboard");
     } catch (err) {
@@ -87,9 +84,6 @@ export default function Login() {
               />
             </div>
 
-            {/* FIX 1 APPLIED: Added onClick={handleLogin} here to bypass 
-              the disabled-button browser bug 
-            */}
             <button
               type="submit"
               onClick={handleLogin} 
