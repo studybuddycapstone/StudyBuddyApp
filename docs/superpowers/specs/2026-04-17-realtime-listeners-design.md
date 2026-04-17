@@ -2,7 +2,7 @@
 
 **Goal:** Replace one-time data fetches in Chat and Connections with live Firestore `onSnapshot` listeners, so messages and connection state update automatically without a page refresh.
 
-**Architecture:** Two focused custom React hooks (`useMessages`, `useConnections`) own listener setup, retry logic, and cleanup. Firestore-specific listener wiring lives in two new functions in `firestore.ts`. Components swap their existing fetch calls for the hooks. Demo mode falls back to the existing one-time fetch — no behavior change.
+**Architecture:** Two focused custom React hooks (`useMessages`, `useConnections`) own listener setup, retry logic, and cleanup. Firestore-specific listener wiring lives in two new functions in `firestore.ts`. Components swap their existing fetch calls for the hooks. Demo mode falls back to the existing one-time fetch with a `refetch()` escape hatch for post-mutation updates.
 
 **Tech Stack:** React 18, TypeScript, Firebase Firestore (`onSnapshot`), Vite.
 
@@ -16,20 +16,19 @@
 - `src/pages/Chat.tsx` — swap fetch + state for `useMessages`
 - `src/pages/Connections.tsx` — swap fetch + state for `useConnections`
 
-Demo mode behavior is unchanged: falls back to `getMessages` / `getConnectionsForUser` from `dataService.ts`.
-
 ---
 
 ## Firestore Layer
 
-### `subscribeToMessages(connectionId, callback): () => void`
+Both subscribe functions accept an `onData` and `onError` callback so the hook's retry logic is reachable. They return the Firestore unsubscribe function.
 
-Sets up an `onSnapshot` listener on the `messages` collection filtered by `connectionId`, ordered by `timestamp` ascending. Calls `callback(messages)` on every push. Returns the Firestore unsubscribe function. Does not handle errors — callers own retry logic.
+### `subscribeToMessages`
 
 ```ts
 export function subscribeToMessages(
   connectionId: string,
-  callback: (msgs: Message[]) => void
+  onData: (msgs: Message[]) => void,
+  onError: (err: Error) => void
 ): () => void {
   if (!db) return () => {};
   const q = query(
@@ -37,31 +36,37 @@ export function subscribeToMessages(
     where("connectionId", "==", connectionId),
     orderBy("timestamp", "asc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message)));
-  });
+  return onSnapshot(
+    q,
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message))),
+    onError
+  );
 }
 ```
 
-### `subscribeToConnections(uid, callback): () => void`
-
-Sets up an `onSnapshot` listener on the `connections` collection filtered to documents where `participants` array contains `uid`. Calls `callback(connections)` on every push. Returns unsubscribe.
+### `subscribeToConnections`
 
 ```ts
 export function subscribeToConnections(
   uid: string,
-  callback: (conns: Connection[]) => void
+  onData: (conns: Connection[]) => void,
+  onError: (err: Error) => void
 ): () => void {
   if (!db) return () => {};
   const q = query(
     collection(db, "connections"),
-    where("participants", "array-contains", uid)
+    where("participants", "array-contains", uid),
+    orderBy("createdAt", "asc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Connection)));
-  });
+  return onSnapshot(
+    q,
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Connection))),
+    onError
+  );
 }
 ```
+
+`orderBy("createdAt", "asc")` gives stable, predictable ordering that won't reshuffle on updates.
 
 ---
 
@@ -73,43 +78,55 @@ Both hooks follow the same structure. Described once; both conform to this patte
 
 ```ts
 {
-  data: T[];        // messages or connections
+  data: T[];
   loading: boolean;
   error: string | null;
+  refetch: () => void;  // no-op in Firebase mode; re-runs fetch in demo mode
 }
 ```
 
+### Invalid input guard
+
+If the key argument (`connectionId` or `uid`) is falsy, the hook returns `{ data: [], loading: false, error: null, refetch: () => {} }` immediately without setting up any listener or making any Firestore call.
+
 ### Firebase mode behavior
 
-1. `useEffect` runs when the key dependency changes (`connectionId` or `uid`).
-2. Calls the subscribe function, storing the unsubscribe reference.
-3. On successful callback: sets `data`, sets `loading: false`, resets retry counter to 0.
-4. On `onSnapshot` error:
-   - Calls unsubscribe on the failed listener.
-   - Increments retry counter.
-   - If retry count < 3: waits with exponential backoff (`1000ms * 2^retryCount`) then re-establishes the listener.
-   - If retry count ≥ 3: sets `error` to `"Live updates unavailable — reconnect or refresh"`, stops retrying.
-5. Cleanup: calls unsubscribe on unmount or dependency change. Cancels any pending retry timeout.
+Inside `useEffect` (runs when the key dependency changes):
+
+1. **Guard**: if argument is falsy, return early (see above).
+2. Set `loading: true`, `error: null`.
+3. Create a `retryCount` local variable (scoped to this effect run).
+4. Declare an `unsubscribeRef` to track the active listener.
+5. Declare a `retryTimeoutRef = useRef<ReturnType<typeof setTimeout>>()` at the hook level (not inside the effect) so cleanup can always reach it.
+6. Call `subscribe(arg, onData, onError)`:
+   - `onData`: set `data`, set `loading: false`, reset `retryCount` to 0.
+   - `onError`: call the current listener's unsubscribe, increment `retryCount`. If `retryCount < 3`: schedule retry via `retryTimeoutRef.current = setTimeout(resubscribe, 1000 * 2 ** retryCount)`. If `retryCount >= 3`: set `error` to `"Live updates unavailable — reconnect or refresh"`, stop.
+7. **Cleanup** (on unmount or dependency change): call `clearTimeout(retryTimeoutRef.current)` then call the active listener's unsubscribe. This guarantees:
+   - No pending retry can fire after the component unmounts.
+   - No stale listener persists when the key argument changes.
+   - No two listeners are ever active simultaneously.
 
 ### Demo mode behavior
 
-`useEffect` calls the existing `getMessages` / `getConnectionsForUser` from `dataService.ts` once. Sets `data` from the result and `loading: false`. No retry logic — local data cannot fail.
+The `useEffect` calls the existing async fetch once (`getMessages` / `getConnectionsForUser` from `dataService.ts`). Sets `data` and `loading: false`. Exposes a `refetch` function that re-runs the same fetch — handlers call this after mutations so the UI stays in sync.
+
+No retry logic — local in-memory data cannot fail.
 
 ### `useMessages(connectionId: string)`
 
 File: `src/hooks/useMessages.ts`
 
 - Dependency: `connectionId`
-- Subscribes via `subscribeToMessages`
-- Demo fallback: `getMessages(connectionId)`
+- Firebase: subscribes via `subscribeToMessages`
+- Demo: calls `getMessages(connectionId)`, exposes `refetch`
 
 ### `useConnections(uid: string)`
 
 File: `src/hooks/useConnections.ts`
 
 - Dependency: `uid`
-- Subscribes via `subscribeToConnections`
-- Demo fallback: `getConnectionsForUser(uid)`
+- Firebase: subscribes via `subscribeToConnections`
+- Demo: calls `getConnectionsForUser(uid)`, exposes `refetch`
 
 ---
 
@@ -117,44 +134,91 @@ File: `src/hooks/useConnections.ts`
 
 ### `Chat.tsx`
 
-- Remove `messages` and `loading` state declarations.
-- Remove `getMessages` call from `loadChatData`.
-- Add: `const { messages, loading: messagesLoading, error: messagesError } = useMessages(connectionId ?? "");`
-- The combined `loading` check (connection + other user + messages) uses `messagesLoading` for the messages part.
-- `handleSend` no longer appends to `setMessages` — the listener reflects new messages automatically.
-- If `messagesError` is non-null: render a small amber banner below the chat header: `"Live updates unavailable — reconnect or refresh"`.
+**Remove:**
+- `messages` state, `loading` state (for messages)
+- `getMessages` call inside `loadChatData`
+- The `setMessages([...messages, msg])` append in `handleSend`
 
-### `Connections.tsx`
+**Add import** (not currently in Chat.tsx):
+```tsx
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+```
 
-- Remove `connections` and `loading` state declarations.
-- Remove `getConnectionsForUser` call from the fetch effect.
-- Add: `const { connections, loading, error: connectionsError } = useConnections(user?.uid ?? "");`
-- `handleAccept`, `handleDecline`, `handleRemoveConnection` no longer need to call `setConnections` — the listener automatically reflects changes written to Firestore.
-- If `connectionsError` is non-null: render the same amber banner below the page header.
+**Add hook:**
+```tsx
+const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages(connectionId ?? "");
+```
 
-> **Demo mode note:** In demo mode, accept/decline/remove still mutate local in-memory state directly (via `dataService`). The hook's one-time fetch does not re-run after mutations. Each handler wraps its `setConnections` call in `if (!hasFirebaseConfig)` so state is updated manually in demo mode but skipped in Firebase mode (where the listener reflects the change automatically).
+The combined loading check uses `messagesLoading` for the messages part alongside the existing connection/otherUser loading.
 
----
-
-## Error Banner
-
-Both pages use the same pattern when `error` is non-null:
+**`handleSend` update:** In Firebase mode, the listener picks up the new message automatically — no manual append. In demo mode, call `refetchMessages()` after `sendMessage()` resolves so the sent message appears:
 
 ```tsx
-{error && (
+const handleSend = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!newMessage.trim() || !user || !connectionId) return;
+  try {
+    await sendMessage(connectionId, user.uid, newMessage.trim());
+    setNewMessage("");
+    if (!hasFirebaseConfig) refetchMessages();
+  } catch (error) {
+    console.error("Failed to send message:", error);
+    alert("Failed to send message. Check console for details.");
+  }
+};
+```
+
+**Error banner** (if `messagesError` is non-null, shown below the chat header):
+
+```tsx
+{messagesError && (
   <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
-    <p className="text-amber-700 text-xs">{error}</p>
+    <p className="text-amber-700 text-xs">{messagesError}</p>
   </div>
 )}
 ```
 
-Positioned: below the page/chat header, above the main content area.
+### `Connections.tsx`
+
+**Remove:**
+- `connections` state, `loading` state
+- `getConnectionsForUser` call and its surrounding fetch effect
+
+**Add import** (not currently in Connections.tsx):
+```tsx
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+```
+
+**Add hook:**
+```tsx
+const { connections, loading, error: connectionsError, refetch: refetchConnections } = useConnections(user?.uid ?? "");
+```
+
+**Handler updates:** Each mutation handler (`handleAccept`, `handleDecline`, `handleRemoveConnection`) calls `refetchConnections()` after its operation in demo mode. In Firebase mode, the listener reflects the change automatically:
+
+```tsx
+// Pattern applied to all three handlers:
+await declineConnection(connectionId);
+if (!hasFirebaseConfig) refetchConnections();
+```
+
+**Error banner** (same pattern as Chat, positioned below the page header).
+
+---
+
+## Listener Safety Guarantees
+
+- **No stale listeners**: cleanup always unsubscribes the active listener before the effect re-runs.
+- **No stacking**: the unsubscribe from the previous effect run fires before the new listener is created.
+- **No orphaned retries**: `clearTimeout` in cleanup cancels any pending retry before it fires.
+- **No unmounted state updates**: cleanup fires on unmount, cancelling both the listener and any pending timeout.
 
 ---
 
 ## What Is Not Changing
 
-- `dataService.ts` — no new exports needed; hooks call `firestore.ts` directly for Firebase mode
+- `dataService.ts` — no new exports; hooks call `firestore.ts` directly in Firebase mode and `dataService.ts` in demo mode
+- All write operations (`sendMessage`, `acceptConnection`, `declineConnection`, `removeConnection`) — unchanged
 - `ProfileModal`, `Navbar`, `ProtectedRoute` — untouched
-- `sendMessage`, `acceptConnection`, `declineConnection`, `removeConnection` in `dataService.ts` — untouched; writes still go through the existing service
-- Demo mode data or seed data — untouched
+- Demo seed data — untouched
+- The existing `loadChatData` effect in Chat that fetches connection info and other user's profile — this remains; only the messages fetch is replaced
