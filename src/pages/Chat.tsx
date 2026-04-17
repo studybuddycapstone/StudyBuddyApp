@@ -70,7 +70,7 @@ export default function Chat() {
     return () => {
       isMounted = false;
     };
-  }, [user, connectionId]);
+  }, [user, connectionId, navigate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
