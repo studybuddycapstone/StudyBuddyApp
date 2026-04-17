@@ -2,26 +2,32 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import {
-  getMessages,
   sendMessage,
   clearMessages,
   getConnectionsForUser,
   getProfile,
 } from "../data/dataService";
-import type { Message, Connection, UserProfile } from "../types";
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+import { useMessages } from "../hooks/useMessages";
+import type { Connection, UserProfile } from "../types";
 import ProfileModal from "../components/ProfileModal";
 
 export default function Chat() {
   const { connectionId } = useParams<{ connectionId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [connection, setConnection] = useState<Connection | undefined>();
   const [otherUser, setOtherUser] = useState<UserProfile | undefined>();
   const [loading, setLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const {
+    messages,
+    loading: messagesLoading,
+    error: messagesError,
+    refetch: refetchMessages,
+  } = useMessages(connectionId ?? "");
 
   useEffect(() => {
     if (!user || !connectionId) return;
@@ -50,8 +56,6 @@ export default function Chat() {
             const profile = await getProfile(otherUserId);
             if (isMounted && profile) setOtherUser(profile);
           }
-          const msgs = await getMessages(connectionId);
-          if (isMounted) setMessages(msgs);
         }
       } catch (error) {
         console.error("🔥 CRITICAL FIREBASE ERROR LOAD CHAT:", error);
@@ -77,7 +81,7 @@ export default function Chat() {
     if (!confirm("Clear all messages in this conversation? This cannot be undone.")) return;
     try {
       await clearMessages(connectionId);
-      setMessages([]);
+      if (!hasFirebaseConfig) refetchMessages();
     } catch {
       alert("Failed to clear messages. Please try again.");
     }
@@ -86,11 +90,10 @@ export default function Chat() {
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user || !connectionId) return;
-
     try {
-      const msg = await sendMessage(connectionId, user.uid, newMessage.trim());
-      setMessages([...messages, msg]);
+      await sendMessage(connectionId, user.uid, newMessage.trim());
       setNewMessage("");
+      if (!hasFirebaseConfig) refetchMessages();
     } catch (error) {
       console.error("Failed to send message:", error);
       alert("Failed to send message. Check console for details.");
@@ -117,7 +120,7 @@ export default function Chat() {
     return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
   };
 
-  if (loading) {
+  if (loading || messagesLoading) {
     return (
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
         <p className="text-gray-500">Loading chat...</p>
@@ -180,6 +183,12 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {messagesError && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <p className="text-amber-700 text-xs">{messagesError}</p>
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
