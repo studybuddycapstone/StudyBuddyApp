@@ -28,10 +28,6 @@ export default function Connections() {
   } = useConnections(user?.uid ?? "");
 
   useEffect(() => {
-    profileCacheRef.current = profileCache;
-  }, [profileCache]);
-
-  useEffect(() => {
     if (!user || connections.length === 0) return;
 
     const otherUids = connections
@@ -44,13 +40,10 @@ export default function Connections() {
     setProfilesLoading(true);
     Promise.all(newUids.map((uid) => getProfile(uid)))
       .then((profiles) => {
-        setProfileCache((prev) => {
-          const updated = { ...prev };
-          profiles.forEach((p) => {
-            if (p) updated[p.uid] = p;
-          });
-          return updated;
-        });
+        const updates: Record<string, UserProfile> = {};
+        profiles.forEach((p) => { if (p) updates[p.uid] = p; });
+        profileCacheRef.current = { ...profileCacheRef.current, ...updates };
+        setProfileCache(profileCacheRef.current);
       })
       .catch((err) => {
         console.error("Failed to fetch connection profiles:", err);
