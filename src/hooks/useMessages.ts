@@ -16,14 +16,26 @@ export function useMessages(connectionId: string): {
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setError(null);
+  }, [connectionId]);
+
+  useEffect(() => {
     if (!connectionId) return;
 
     if (!hasFirebaseConfig) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
-      getMessages(connectionId).then((msgs) => {
-        setMessages(msgs);
-        setLoading(false);
-      });
+      getMessages(connectionId)
+        .then((msgs) => {
+          setMessages(msgs);
+          setLoading(false);
+        })
+        .catch((e) => {
+          console.error("useMessages demo fetch error:", e);
+          setError("Failed to load messages");
+          setLoading(false);
+        });
       return;
     }
 
@@ -43,7 +55,7 @@ export function useMessages(connectionId: string): {
           console.error("useMessages listener error:", err);
           unsubscribe();
           retryCount += 1;
-          if (retryCount < 3) {
+          if (retryCount <= 3) {
             retryTimeoutRef.current = setTimeout(connect, 1000 * 2 ** retryCount);
           } else {
             setError("Live updates unavailable — reconnect or refresh");
@@ -62,7 +74,9 @@ export function useMessages(connectionId: string): {
 
   const refetch = () => {
     if (!hasFirebaseConfig && connectionId) {
-      getMessages(connectionId).then(setMessages);
+      getMessages(connectionId)
+        .then(setMessages)
+        .catch((e) => console.error("useMessages refetch error:", e));
     }
   };
 
