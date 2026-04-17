@@ -78,7 +78,11 @@ export async function getMatches(
       sharedClasses: p.classes.filter((c) => currentUser.classes.includes(c)),
     }))
     .filter((p) => p.sharedClasses.length > 0)
-    .sort((a, b) => b.sharedClasses.length - a.sharedClasses.length);
+    .sort((a, b) => {
+      const scoreA = a.sharedClasses.length * 10 + (a.major === currentUser.major ? 5 : 0);
+      const scoreB = b.sharedClasses.length * 10 + (b.major === currentUser.major ? 5 : 0);
+      return scoreB - scoreA;
+    });
 }
 
 // --- Connection operations ---
