@@ -2,42 +2,49 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import {
-  getConnectionsForUser,
   getProfile,
   acceptConnection,
   declineConnection,
 } from "../data/dataService";
-import type { Connection, UserProfile } from "../types";
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+import { useConnections } from "../hooks/useConnections";
+import type { UserProfile } from "../types";
 import ProfileModal from "../components/ProfileModal";
 
 export default function Connections() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [connections, setConnections] = useState<Connection[]>([]);
   const [profileCache, setProfileCache] = useState<Record<string, UserProfile>>({});
-  const [loading, setLoading] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    getConnectionsForUser(user.uid).then(async (conns) => {
-      setConnections(conns);
+  const {
+    connections,
+    loading,
+    error: connectionsError,
+    refetch: refetchConnections,
+  } = useConnections(user?.uid ?? "");
 
-      // Fetch profiles for all other participants
-      const otherUids = conns
-        .flatMap((c) => c.participants)
-        .filter((uid) => uid !== user.uid);
-      const unique = [...new Set(otherUids)];
-      const profiles = await Promise.all(unique.map((uid) => getProfile(uid)));
-      const cache: Record<string, UserProfile> = {};
-      profiles.forEach((p) => {
-        if (p) cache[p.uid] = p;
+  useEffect(() => {
+    if (!user || connections.length === 0) return;
+
+    const otherUids = connections
+      .flatMap((c) => c.participants)
+      .filter((uid) => uid !== user.uid);
+    const unique = [...new Set(otherUids)];
+    const newUids = unique.filter((uid) => !profileCache[uid]);
+    if (newUids.length === 0) return;
+
+    Promise.all(newUids.map((uid) => getProfile(uid))).then((profiles) => {
+      setProfileCache((prev) => {
+        const updated = { ...prev };
+        profiles.forEach((p) => {
+          if (p) updated[p.uid] = p;
+        });
+        return updated;
       });
-      setProfileCache(cache);
-      setLoading(false);
     });
-  }, [user]);
+  }, [user, connections]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const incoming = connections.filter(
     (c) => c.status === "pending" && c.requesterId !== user?.uid
@@ -54,14 +61,12 @@ export default function Connections() {
 
   const handleAccept = async (connectionId: string) => {
     await acceptConnection(connectionId);
-    setConnections((prev) =>
-      prev.map((c) => (c.id === connectionId ? { ...c, status: "active" } : c))
-    );
+    if (!hasFirebaseConfig) refetchConnections();
   };
 
   const handleDecline = async (connectionId: string) => {
     await declineConnection(connectionId);
-    setConnections((prev) => prev.filter((c) => c.id !== connectionId));
+    if (!hasFirebaseConfig) refetchConnections();
   };
 
   const handleRemoveConnection = async (connectionId: string) => {
@@ -69,7 +74,7 @@ export default function Connections() {
     setRemoving(connectionId);
     try {
       await declineConnection(connectionId);
-      setConnections((prev) => prev.filter((c) => c.id !== connectionId));
+      if (!hasFirebaseConfig) refetchConnections();
     } catch {
       alert("Failed to remove connection. Please try again.");
     } finally {
@@ -92,6 +97,12 @@ export default function Connections() {
         <p className="text-gray-500 mb-8">
           Manage your study buddy requests and active connections.
         </p>
+
+        {connectionsError && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{connectionsError}</p>
+          </div>
+        )}
 
         {incoming.length > 0 && (
           <section className="mb-8">
