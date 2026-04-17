@@ -9,7 +9,7 @@ const navLinks = [
 ];
 
 export default function Navbar() {
-  const { user, logoutUser } = useAuth();
+  const { user, logoutUser, isDemo } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -51,6 +51,17 @@ export default function Navbar() {
           <span className="text-sm text-gray-500">
             {user.firstName}
           </span>
+          {isDemo && (
+            <button
+              onClick={() => {
+                localStorage.removeItem("studybuddy_demo");
+                window.location.href = "/";
+              }}
+              className="px-3 py-1.5 text-sm font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
+            >
+              Reset Demo
+            </button>
+          )}
           <button
             onClick={handleLogout}
             className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
