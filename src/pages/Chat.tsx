@@ -123,7 +123,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="h-screen bg-green-50 flex flex-col overflow-hidden">
+    <div className="h-full bg-green-50 flex flex-col overflow-hidden">
       {/* Chat header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
