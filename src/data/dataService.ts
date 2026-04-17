@@ -79,8 +79,9 @@ export async function getMatches(
     }))
     .filter((p) => p.sharedClasses.length > 0)
     .sort((a, b) => {
-      const scoreA = a.sharedClasses.length * 10 + (a.major === currentUser.major ? 5 : 0);
-      const scoreB = b.sharedClasses.length * 10 + (b.major === currentUser.major ? 5 : 0);
+      const sameMajor = (m: string) => Boolean(m) && m === currentUser.major;
+      const scoreA = a.sharedClasses.length * 10 + (sameMajor(a.major) ? 5 : 0);
+      const scoreB = b.sharedClasses.length * 10 + (sameMajor(b.major) ? 5 : 0);
       return scoreB - scoreA;
     });
 }
