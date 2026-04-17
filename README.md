@@ -1,73 +1,72 @@
-# React + TypeScript + Vite
+# StudyBuddy
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React + TypeScript app that helps university students find classmates with shared courses, send connection requests, and chat.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Match with students who share your classes (ranked by overlap)
+- Send and manage connection requests
+- Chat with active connections
+- Firebase auth with `.edu` email requirement
+- Demo mode — no account needed
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
+- React 18 + TypeScript + Vite
+- Tailwind CSS v4
+- Firebase (Auth + Firestore)
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Node.js 18+
+- A Firebase project (optional — see Demo Mode)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Install
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Configure Firebase (optional)
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Create `.env.local` with your Firebase project credentials:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+```
+
+If these vars are absent, the app runs in **demo mode** using local seed data.
+
+### Run
+
+```bash
+npm run dev
+```
+
+### Lint / Build
+
+```bash
+npm run lint
+npm run build
+```
+
+## Architecture
+
+```
+src/
+  pages/          # Route-level components (Login, Dashboard, Matches, Connections, Chat, ProfilePage)
+  components/     # Shared UI (Navbar, ProtectedRoute, ProfileModal)
+  context/        # Auth state (AuthContext.tsx + useAuth.ts)
+  data/           # dataService.ts — switches between Firebase and demo data
+  firebase/       # auth.ts, firestore.ts, firebaseConfig.ts
+  types/          # Shared TypeScript interfaces
+```
+
+Data flows through `dataService.ts`, which abstracts Firestore and in-memory demo data behind the same async API. Auth state lives in `AuthContext` and is consumed via the `useAuth` hook.
