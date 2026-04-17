@@ -39,6 +39,11 @@ export default function Chat() {
         if (!isMounted) return;
         setConnection(conn);
 
+        if (conn && !conn.participants.includes(user.uid)) {
+          if (isMounted) navigate("/connections");
+          return;
+        }
+
         if (conn) {
           const otherUserId = conn.participants.find((p) => p !== user.uid);
           if (otherUserId) {
