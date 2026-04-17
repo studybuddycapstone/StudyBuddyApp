@@ -8,6 +8,7 @@ import {
   getProfile,
 } from "../data/dataService";
 import type { Message, Connection, UserProfile } from "../types";
+import ProfileModal from "../components/ProfileModal";
 
 export default function Chat() {
   const { connectionId } = useParams<{ connectionId: string }>();
@@ -18,6 +19,7 @@ export default function Chat() {
   const [connection, setConnection] = useState<Connection | undefined>();
   const [otherUser, setOtherUser] = useState<UserProfile | undefined>();
   const [loading, setLoading] = useState(true);
+  const [showProfile, setShowProfile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -135,17 +137,22 @@ export default function Chat() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center">
-            <span className="text-green-700 font-semibold text-sm">
-              {otherUser.firstName[0]}
-            </span>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-800 text-sm">
-              {otherUser.firstName} {otherUser.lastName}
-            </p>
-            <p className="text-xs text-gray-500">{otherUser.major}</p>
-          </div>
+          <button
+            onClick={() => setShowProfile(true)}
+            className="flex items-center gap-3 bg-transparent border-none cursor-pointer p-0"
+          >
+            <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center">
+              <span className="text-green-700 font-semibold text-sm">
+                {otherUser.firstName.charAt(0) || "?"}
+              </span>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">
+                {otherUser.firstName} {otherUser.lastName}
+              </p>
+              {otherUser.major && <p className="text-xs text-gray-500">{otherUser.major}</p>}
+            </div>
+          </button>
         </div>
       </div>
 
@@ -219,6 +226,12 @@ export default function Chat() {
           </button>
         </form>
       </div>
+      {showProfile && otherUser && (
+        <ProfileModal
+          profile={otherUser}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
     </div>
   );
 }

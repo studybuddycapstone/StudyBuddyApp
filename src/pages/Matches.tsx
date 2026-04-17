@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/useAuth";
 import { getMatches, sendConnectionRequest } from "../data/dataService";
 import type { UserProfile } from "../types";
+import ProfileModal from "../components/ProfileModal";
 
 export default function Matches() {
   const { user } = useAuth();
   const [matches, setMatches] = useState<(UserProfile & { sharedClasses: string[] })[]>([]);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -59,17 +61,21 @@ export default function Matches() {
                 className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
+                  <button
+                    type="button"
+                    className="flex items-start gap-4 cursor-pointer text-left bg-transparent border-none p-0 w-full"
+                    onClick={() => setSelectedProfile(match)}
+                  >
                     <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center shrink-0">
                       <span className="text-green-700 font-semibold text-lg">
-                        {match.firstName[0]}
+                        {match.firstName.charAt(0) || "?"}
                       </span>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-800">
+                      <h3 className="text-lg font-semibold text-gray-800 hover:text-green-700 transition-colors">
                         {match.firstName} {match.lastName}
                       </h3>
-                      <p className="text-sm text-green-600 font-medium">{match.major}</p>
+                      {match.major && <p className="text-sm text-green-600 font-medium">{match.major}</p>}
                       <p className="text-sm text-gray-500 mt-1">{match.bio}</p>
 
                       <div className="mt-3">
@@ -97,7 +103,7 @@ export default function Matches() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </button>
 
                   <button
                     onClick={() => handleConnect(match.uid)}
@@ -116,6 +122,12 @@ export default function Matches() {
           </div>
         )}
       </div>
+      {selectedProfile && (
+        <ProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+        />
+      )}
     </div>
   );
 }

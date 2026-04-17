@@ -8,6 +8,7 @@ import {
   declineConnection,
 } from "../data/dataService";
 import type { Connection, UserProfile } from "../types";
+import ProfileModal from "../components/ProfileModal";
 
 export default function Connections() {
   const { user } = useAuth();
@@ -15,6 +16,7 @@ export default function Connections() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [profileCache, setProfileCache] = useState<Record<string, UserProfile>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -91,19 +93,23 @@ export default function Connections() {
                     key={conn.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-green-200 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-none p-0"
+                      onClick={() => setSelectedProfile(other)}
+                    >
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                         <span className="text-green-700 font-semibold">
-                          {other.firstName[0]}
+                          {other.firstName.charAt(0) || "?"}
                         </span>
                       </div>
                       <div>
                         <p className="font-semibold text-gray-800">
                           {other.firstName} {other.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{other.major}</p>
+                        {other.major && <p className="text-sm text-gray-500">{other.major}</p>}
                       </div>
-                    </div>
+                    </button>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleAccept(conn.id)}
@@ -139,19 +145,23 @@ export default function Connections() {
                     key={conn.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-none p-0"
+                      onClick={() => setSelectedProfile(other)}
+                    >
                       <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                         <span className="text-gray-600 font-semibold">
-                          {other.firstName[0]}
+                          {other.firstName.charAt(0) || "?"}
                         </span>
                       </div>
                       <div>
                         <p className="font-semibold text-gray-800">
                           {other.firstName} {other.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{other.major}</p>
+                        {other.major && <p className="text-sm text-gray-500">{other.major}</p>}
                       </div>
-                    </div>
+                    </button>
                     <span className="text-sm text-gray-400 font-medium">Pending</span>
                   </div>
                 );
@@ -180,17 +190,21 @@ export default function Connections() {
                     key={conn.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-none p-0"
+                      onClick={() => setSelectedProfile(other)}
+                    >
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                         <span className="text-green-700 font-semibold">
-                          {other.firstName[0]}
+                          {other.firstName.charAt(0) || "?"}
                         </span>
                       </div>
                       <div>
                         <p className="font-semibold text-gray-800">
                           {other.firstName} {other.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{other.major}</p>
+                        {other.major && <p className="text-sm text-gray-500">{other.major}</p>}
                         <div className="flex flex-wrap gap-1 mt-1">
                           {other.classes
                             .filter((c) => user?.classes.includes(c))
@@ -204,7 +218,7 @@ export default function Connections() {
                             ))}
                         </div>
                       </div>
-                    </div>
+                    </button>
                     <button
                       onClick={() => navigate(`/chat/${conn.id}`)}
                       className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-full hover:bg-green-700 transition-colors cursor-pointer"
@@ -218,6 +232,12 @@ export default function Connections() {
           )}
         </section>
       </div>
+      {selectedProfile && (
+        <ProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+        />
+      )}
     </div>
   );
 }
