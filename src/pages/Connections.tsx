@@ -18,7 +18,6 @@ export default function Connections() {
   const profileCacheRef = useRef<Record<string, UserProfile>>({});
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
-  const [profilesLoading, setProfilesLoading] = useState(false);
 
   const {
     connections,
@@ -37,7 +36,6 @@ export default function Connections() {
     const newUids = unique.filter((uid) => !profileCacheRef.current[uid]);
     if (newUids.length === 0) return;
 
-    setProfilesLoading(true);
     Promise.all(newUids.map((uid) => getProfile(uid)))
       .then((profiles) => {
         const updates: Record<string, UserProfile> = {};
@@ -47,9 +45,6 @@ export default function Connections() {
       })
       .catch((err) => {
         console.error("Failed to fetch connection profiles:", err);
-      })
-      .finally(() => {
-        setProfilesLoading(false);
       });
   }, [user, connections]);
 
@@ -89,7 +84,7 @@ export default function Connections() {
     }
   };
 
-  if (loading || profilesLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
         <p className="text-gray-500">Loading connections...</p>

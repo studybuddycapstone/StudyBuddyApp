@@ -14,17 +14,16 @@ export function useMessages(connectionId: string): {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
-  }, [connectionId]);
-
-  useEffect(() => {
     if (!connectionId) return;
 
+    isMounted.current = true;
+
     if (!hasFirebaseConfig) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
       getMessages(connectionId)
         .then((msgs) => {
@@ -36,7 +35,9 @@ export function useMessages(connectionId: string): {
           setError("Failed to load messages");
           setLoading(false);
         });
-      return;
+      return () => {
+        isMounted.current = false;
+      };
     }
 
     setLoading(true);
@@ -44,6 +45,7 @@ export function useMessages(connectionId: string): {
     let unsubscribe = () => {};
 
     const connect = () => {
+      if (!isMounted.current) return;
       unsubscribe = subscribeToMessages(
         connectionId,
         (msgs) => {
@@ -67,6 +69,7 @@ export function useMessages(connectionId: string): {
     connect();
 
     return () => {
+      isMounted.current = false;
       clearTimeout(retryTimeoutRef.current ?? undefined);
       unsubscribe();
     };

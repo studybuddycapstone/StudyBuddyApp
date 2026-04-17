@@ -14,17 +14,16 @@ export function useConnections(uid: string): {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
-  }, [uid]);
-
-  useEffect(() => {
     if (!uid) return;
 
+    isMounted.current = true;
+
     if (!hasFirebaseConfig) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
       getConnectionsForUser(uid)
         .then((conns) => {
@@ -36,7 +35,9 @@ export function useConnections(uid: string): {
           setError("Failed to load connections");
           setLoading(false);
         });
-      return;
+      return () => {
+        isMounted.current = false;
+      };
     }
 
     setLoading(true);
@@ -44,6 +45,7 @@ export function useConnections(uid: string): {
     let unsubscribe = () => {};
 
     const connect = () => {
+      if (!isMounted.current) return;
       unsubscribe = subscribeToConnections(
         uid,
         (conns) => {
@@ -67,6 +69,7 @@ export function useConnections(uid: string): {
     connect();
 
     return () => {
+      isMounted.current = false;
       clearTimeout(retryTimeoutRef.current ?? undefined);
       unsubscribe();
     };
