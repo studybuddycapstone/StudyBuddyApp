@@ -1,40 +1,53 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import {
-  getConnectionsForUser,
   getProfile,
   acceptConnection,
   declineConnection,
 } from "../data/dataService";
-import type { Connection, UserProfile } from "../types";
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+import { useConnections } from "../hooks/useConnections";
+import type { UserProfile } from "../types";
+import ProfileModal from "../components/ProfileModal";
 
 export default function Connections() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [connections, setConnections] = useState<Connection[]>([]);
   const [profileCache, setProfileCache] = useState<Record<string, UserProfile>>({});
-  const [loading, setLoading] = useState(true);
+  const profileCacheRef = useRef<Record<string, UserProfile>>({});
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const {
+    connections,
+    loading,
+    error: connectionsError,
+    refetch: refetchConnections,
+  } = useConnections(user?.uid ?? "");
 
   useEffect(() => {
-    if (!user) return;
-    getConnectionsForUser(user.uid).then(async (conns) => {
-      setConnections(conns);
+    if (!user || connections.length === 0) return;
 
-      // Fetch profiles for all other participants
-      const otherUids = conns
-        .flatMap((c) => c.participants)
-        .filter((uid) => uid !== user.uid);
-      const unique = [...new Set(otherUids)];
-      const profiles = await Promise.all(unique.map((uid) => getProfile(uid)));
-      const cache: Record<string, UserProfile> = {};
-      profiles.forEach((p) => {
-        if (p) cache[p.uid] = p;
+    const otherUids = connections
+      .flatMap((c) => c.participants)
+      .filter((uid) => uid !== user.uid);
+    const unique = [...new Set(otherUids)];
+    const newUids = unique.filter((uid) => !profileCacheRef.current[uid]);
+    if (newUids.length === 0) return;
+
+    Promise.all(newUids.map((uid) => getProfile(uid)))
+      .then((profiles) => {
+        const updates: Record<string, UserProfile> = {};
+        profiles.forEach((p) => { if (p) updates[p.uid] = p; });
+        profileCacheRef.current = { ...profileCacheRef.current, ...updates };
+        setProfileCache(profileCacheRef.current);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch connection profiles:", err);
       });
-      setProfileCache(cache);
-      setLoading(false);
-    });
-  }, [user]);
+  }, [user, connections]);
 
   const incoming = connections.filter(
     (c) => c.status === "pending" && c.requesterId !== user?.uid
@@ -50,15 +63,40 @@ export default function Connections() {
   };
 
   const handleAccept = async (connectionId: string) => {
-    await acceptConnection(connectionId);
-    setConnections((prev) =>
-      prev.map((c) => (c.id === connectionId ? { ...c, status: "active" } : c))
-    );
+    try {
+      await acceptConnection(connectionId);
+      if (!hasFirebaseConfig) refetchConnections();
+      setActionError(null);
+    } catch (err) {
+      console.error("Failed to accept request:", err);
+      setActionError("Failed to accept request. Please try again.");
+    }
   };
 
   const handleDecline = async (connectionId: string) => {
-    await declineConnection(connectionId);
-    setConnections((prev) => prev.filter((c) => c.id !== connectionId));
+    try {
+      await declineConnection(connectionId);
+      if (!hasFirebaseConfig) refetchConnections();
+      setActionError(null);
+    } catch (err) {
+      console.error("Failed to decline request:", err);
+      setActionError("Failed to decline request. Please try again.");
+    }
+  };
+
+  const handleRemoveConnection = async (connectionId: string) => {
+    if (!confirm("Remove this connection? This cannot be undone.")) return;
+    setRemoving(connectionId);
+    try {
+      await declineConnection(connectionId);
+      if (!hasFirebaseConfig) refetchConnections();
+      setActionError(null);
+    } catch (err) {
+      console.error("Failed to remove connection:", err);
+      setActionError("Failed to remove connection. Please try again.");
+    } finally {
+      setRemoving(null);
+    }
   };
 
   if (loading) {
@@ -77,6 +115,17 @@ export default function Connections() {
           Manage your study buddy requests and active connections.
         </p>
 
+        {connectionsError && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{connectionsError}</p>
+          </div>
+        )}
+        {actionError && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{actionError}</p>
+          </div>
+        )}
+
         {incoming.length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold text-gray-800 mb-3">
@@ -91,19 +140,23 @@ export default function Connections() {
                     key={conn.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-green-200 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-none p-0"
+                      onClick={() => setSelectedProfile(other)}
+                    >
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                         <span className="text-green-700 font-semibold">
-                          {other.firstName[0]}
+                          {other.firstName.charAt(0) || "?"}
                         </span>
                       </div>
                       <div>
                         <p className="font-semibold text-gray-800">
                           {other.firstName} {other.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{other.major}</p>
+                        {other.major && <p className="text-sm text-gray-500">{other.major}</p>}
                       </div>
-                    </div>
+                    </button>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleAccept(conn.id)}
@@ -139,19 +192,23 @@ export default function Connections() {
                     key={conn.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-none p-0"
+                      onClick={() => setSelectedProfile(other)}
+                    >
                       <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                         <span className="text-gray-600 font-semibold">
-                          {other.firstName[0]}
+                          {other.firstName.charAt(0) || "?"}
                         </span>
                       </div>
                       <div>
                         <p className="font-semibold text-gray-800">
                           {other.firstName} {other.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{other.major}</p>
+                        {other.major && <p className="text-sm text-gray-500">{other.major}</p>}
                       </div>
-                    </div>
+                    </button>
                     <span className="text-sm text-gray-400 font-medium">Pending</span>
                   </div>
                 );
@@ -180,17 +237,21 @@ export default function Connections() {
                     key={conn.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-none p-0"
+                      onClick={() => setSelectedProfile(other)}
+                    >
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                         <span className="text-green-700 font-semibold">
-                          {other.firstName[0]}
+                          {other.firstName.charAt(0) || "?"}
                         </span>
                       </div>
                       <div>
                         <p className="font-semibold text-gray-800">
                           {other.firstName} {other.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{other.major}</p>
+                        {other.major && <p className="text-sm text-gray-500">{other.major}</p>}
                         <div className="flex flex-wrap gap-1 mt-1">
                           {other.classes
                             .filter((c) => user?.classes.includes(c))
@@ -204,13 +265,22 @@ export default function Connections() {
                             ))}
                         </div>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => navigate(`/chat/${conn.id}`)}
-                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-full hover:bg-green-700 transition-colors cursor-pointer"
-                    >
-                      Message
                     </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate(`/chat/${conn.id}`)}
+                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-full hover:bg-green-700 transition-colors cursor-pointer"
+                      >
+                        Message
+                      </button>
+                      <button
+                        onClick={() => handleRemoveConnection(conn.id)}
+                        disabled={removing === conn.id}
+                        className="px-4 py-2 bg-white text-red-500 text-sm font-medium rounded-full border border-red-200 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {removing === conn.id ? "Removing..." : "Remove"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -218,6 +288,12 @@ export default function Connections() {
           )}
         </section>
       </div>
+      {selectedProfile && (
+        <ProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+        />
+      )}
     </div>
   );
 }

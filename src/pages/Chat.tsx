@@ -2,23 +2,33 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import {
-  getMessages,
   sendMessage,
+  clearMessages,
   getConnectionsForUser,
   getProfile,
 } from "../data/dataService";
-import type { Message, Connection, UserProfile } from "../types";
+import { hasFirebaseConfig } from "../firebase/firebaseConfig";
+import { useMessages } from "../hooks/useMessages";
+import type { Connection, UserProfile } from "../types";
+import ProfileModal from "../components/ProfileModal";
 
 export default function Chat() {
   const { connectionId } = useParams<{ connectionId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [connection, setConnection] = useState<Connection | undefined>();
   const [otherUser, setOtherUser] = useState<UserProfile | undefined>();
   const [loading, setLoading] = useState(true);
+  const [showProfile, setShowProfile] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const {
+    messages,
+    loading: messagesLoading,
+    error: messagesError,
+    refetch: refetchMessages,
+  } = useMessages(connectionId ?? "");
 
   useEffect(() => {
     if (!user || !connectionId) return;
@@ -36,14 +46,17 @@ export default function Chat() {
         if (!isMounted) return;
         setConnection(conn);
 
+        if (conn && !conn.participants.includes(user.uid)) {
+          if (isMounted) navigate("/connections");
+          return;
+        }
+
         if (conn) {
           const otherUserId = conn.participants.find((p) => p !== user.uid);
           if (otherUserId) {
             const profile = await getProfile(otherUserId);
             if (isMounted && profile) setOtherUser(profile);
           }
-          const msgs = await getMessages(connectionId);
-          if (isMounted) setMessages(msgs);
         }
       } catch (error) {
         console.error("🔥 CRITICAL FIREBASE ERROR LOAD CHAT:", error);
@@ -58,23 +71,41 @@ export default function Chat() {
     return () => {
       isMounted = false;
     };
-  }, [user, connectionId]);
+  }, [user, connectionId, navigate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleClearMessages = async () => {
+    if (!connectionId) return;
+    if (!confirm("Clear all messages in this conversation? This cannot be undone.")) return;
+    try {
+      await clearMessages(connectionId);
+      if (!hasFirebaseConfig) refetchMessages();
+      setActionError(null);
+    } catch {
+      setActionError("Failed to clear messages. Please try again.");
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !connectionId) return;
-
+    const trimmedMessage = newMessage.trim();
+    const userId = user?.uid;
+    const canSendToConnection =
+      Boolean(connection) &&
+      connection?.status === "active" &&
+      connection?.participants.includes(userId ?? "");
+    if (!trimmedMessage || !connectionId || !canSendToConnection) return;
     try {
-      const msg = await sendMessage(connectionId, user.uid, newMessage.trim());
-      setMessages([...messages, msg]);
+      await sendMessage(connectionId, trimmedMessage);
       setNewMessage("");
+      if (!hasFirebaseConfig) refetchMessages();
+      setActionError(null);
     } catch (error) {
       console.error("Failed to send message:", error);
-      alert("Failed to send message. Check console for details.");
+      setActionError("Failed to send message. Please try again.");
     }
   };
 
@@ -98,7 +129,7 @@ export default function Chat() {
     return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
   };
 
-  if (loading) {
+  if (loading || messagesLoading) {
     return (
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
         <p className="text-gray-500">Loading chat...</p>
@@ -122,8 +153,12 @@ export default function Chat() {
     );
   }
 
+  const canSendToConnection =
+    connection.status === "active" &&
+    connection.participants.includes(user?.uid ?? "");
+
   return (
-    <div className="min-h-screen bg-green-50 flex flex-col">
+    <div className="h-full bg-green-50 flex flex-col overflow-hidden">
       {/* Chat header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
@@ -135,19 +170,50 @@ export default function Chat() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center">
-            <span className="text-green-700 font-semibold text-sm">
-              {otherUser.firstName[0]}
-            </span>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-800 text-sm">
-              {otherUser.firstName} {otherUser.lastName}
-            </p>
-            <p className="text-xs text-gray-500">{otherUser.major}</p>
+          <button
+            onClick={() => setShowProfile(true)}
+            className="flex items-center gap-3 bg-transparent border-none cursor-pointer p-0"
+          >
+            <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center">
+              <span className="text-green-700 font-semibold text-sm">
+                {otherUser.firstName.charAt(0) || "?"}
+              </span>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">
+                {otherUser.firstName} {otherUser.lastName}
+              </p>
+              {otherUser.major && <p className="text-xs text-gray-500">{otherUser.major}</p>}
+            </div>
+          </button>
+          <div className="ml-auto">
+            <button
+              onClick={handleClearMessages}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors cursor-pointer bg-transparent border-none"
+            >
+              Clear
+            </button>
           </div>
         </div>
       </div>
+
+      {messagesError && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <p className="text-amber-700 text-xs">{messagesError}</p>
+        </div>
+      )}
+      {actionError && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <p className="text-amber-700 text-xs">{actionError}</p>
+        </div>
+      )}
+      {!canSendToConnection && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <p className="text-amber-700 text-xs">
+            You can only send messages in your own active conversations.
+          </p>
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
@@ -206,11 +272,12 @@ export default function Chat() {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
+            disabled={!canSendToConnection}
             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
           <button
             type="submit"
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || !canSendToConnection}
             className="w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center hover:bg-green-700 transition-colors disabled:opacity-40 cursor-pointer shrink-0"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,6 +286,12 @@ export default function Chat() {
           </button>
         </form>
       </div>
+      {showProfile && otherUser && (
+        <ProfileModal
+          profile={otherUser}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
     </div>
   );
 }

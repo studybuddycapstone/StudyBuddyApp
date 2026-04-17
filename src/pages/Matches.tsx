@@ -2,25 +2,59 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/useAuth";
 import { getMatches, sendConnectionRequest } from "../data/dataService";
 import type { UserProfile } from "../types";
+import ProfileModal from "../components/ProfileModal";
 
 export default function Matches() {
   const { user } = useAuth();
   const [matches, setMatches] = useState<(UserProfile & { sharedClasses: string[] })[]>([]);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
-    getMatches(user.uid).then((result) => {
-      setMatches(result);
+    if (!user) {
       setLoading(false);
-    });
+      return;
+    }
+
+    let mounted = true;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const result = await getMatches(user.uid);
+        if (mounted) {
+          setMatches(result);
+          setError(null);
+        }
+      } catch (err) {
+        console.error("Failed to load matches:", err);
+        if (mounted) {
+          setMatches([]);
+          setError("Failed to load matches. Please try again.");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   const handleConnect = async (matchUid: string) => {
-    if (!user) return;
-    await sendConnectionRequest(user.uid, matchUid);
-    setSentRequests(new Set([...sentRequests, matchUid]));
+    const normalizedMatchUid = matchUid.trim();
+    if (!user || !normalizedMatchUid) return;
+    try {
+      await sendConnectionRequest(normalizedMatchUid);
+      setSentRequests(new Set([...sentRequests, normalizedMatchUid]));
+      setError(null);
+    } catch (err) {
+      console.error("Failed to send connection request:", err);
+      setError("Failed to send request. Please try again.");
+    }
   };
 
   if (loading) {
@@ -38,6 +72,12 @@ export default function Matches() {
         <p className="text-gray-500 mb-8">
           Students who share classes with you, ranked by the most overlap.
         </p>
+
+        {error && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{error}</p>
+          </div>
+        )}
 
         {matches.length === 0 ? (
           <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center">
@@ -59,17 +99,21 @@ export default function Matches() {
                 className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
+                  <button
+                    type="button"
+                    className="flex items-start gap-4 cursor-pointer text-left bg-transparent border-none p-0 w-full"
+                    onClick={() => setSelectedProfile(match)}
+                  >
                     <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center shrink-0">
                       <span className="text-green-700 font-semibold text-lg">
-                        {match.firstName[0]}
+                        {match.firstName.charAt(0) || "?"}
                       </span>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-800">
+                      <h3 className="text-lg font-semibold text-gray-800 hover:text-green-700 transition-colors">
                         {match.firstName} {match.lastName}
                       </h3>
-                      <p className="text-sm text-green-600 font-medium">{match.major}</p>
+                      {match.major && <p className="text-sm text-green-600 font-medium">{match.major}</p>}
                       <p className="text-sm text-gray-500 mt-1">{match.bio}</p>
 
                       <div className="mt-3">
@@ -97,7 +141,7 @@ export default function Matches() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </button>
 
                   <button
                     onClick={() => handleConnect(match.uid)}
@@ -116,6 +160,12 @@ export default function Matches() {
           </div>
         )}
       </div>
+      {selectedProfile && (
+        <ProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+        />
+      )}
     </div>
   );
 }

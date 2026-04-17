@@ -13,19 +13,34 @@ export default function ProfilePage() {
   const [newClass, setNewClass] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    getProfile(user.uid).then((profile) => {
-      if (profile) {
+
+    let mounted = true;
+    (async () => {
+      try {
+        const profile = await getProfile(user.uid);
+        if (!mounted || !profile) return;
         setFirstName(profile.firstName);
         setLastName(profile.lastName);
         setMajor(profile.major);
         setBio(profile.bio);
         setProjects(profile.projects);
         setClasses(profile.classes);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+        if (mounted) {
+          setError("Failed to load profile. Please refresh and try again.");
+        }
       }
-    });
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   const handleAddClass = () => {
@@ -43,18 +58,27 @@ export default function ProfilePage() {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
-    await saveProfile(user.uid, {
-      firstName,
-      lastName,
-      major,
-      bio,
-      projects,
-      classes,
-    });
-    await refreshUser();
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setError(null);
+
+    try {
+      await saveProfile(user.uid, {
+        firstName,
+        lastName,
+        major,
+        bio,
+        projects,
+        classes,
+      });
+      await refreshUser();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      setError("Failed to save profile. Please try again.");
+      setSaved(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -64,6 +88,12 @@ export default function ProfilePage() {
         <p className="text-gray-500 mb-8">
           Keep your profile updated so study partners can find you.
         </p>
+
+        {error && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSave} className="space-y-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
