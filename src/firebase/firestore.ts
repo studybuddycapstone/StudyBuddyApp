@@ -10,6 +10,7 @@ import {
   query,
   where,
   orderBy,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import type { UserProfile, Connection, Message } from "../types";
@@ -129,4 +130,40 @@ export async function deleteMessages(connectionId: string): Promise<void> {
   );
   const snap = await getDocs(q);
   await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+export function subscribeToMessages(
+  connectionId: string,
+  onData: (msgs: Message[]) => void,
+  onError: (err: Error) => void
+): () => void {
+  if (!db) return () => {};
+  const q = query(
+    collection(db, "messages"),
+    where("connectionId", "==", connectionId),
+    orderBy("timestamp", "asc")
+  );
+  return onSnapshot(
+    q,
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message))),
+    onError
+  );
+}
+
+export function subscribeToConnections(
+  uid: string,
+  onData: (conns: Connection[]) => void,
+  onError: (err: Error) => void
+): () => void {
+  if (!db) return () => {};
+  const q = query(
+    collection(db, "connections"),
+    where("participants", "array-contains", uid),
+    orderBy("createdAt", "asc")
+  );
+  return onSnapshot(
+    q,
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Connection))),
+    onError
+  );
 }
