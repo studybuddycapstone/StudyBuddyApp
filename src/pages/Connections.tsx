@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import {
@@ -15,8 +15,10 @@ export default function Connections() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [profileCache, setProfileCache] = useState<Record<string, UserProfile>>({});
+  const profileCacheRef = useRef<Record<string, UserProfile>>({});
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [profilesLoading, setProfilesLoading] = useState(false);
 
   const {
     connections,
@@ -26,25 +28,37 @@ export default function Connections() {
   } = useConnections(user?.uid ?? "");
 
   useEffect(() => {
+    profileCacheRef.current = profileCache;
+  }, [profileCache]);
+
+  useEffect(() => {
     if (!user || connections.length === 0) return;
 
     const otherUids = connections
       .flatMap((c) => c.participants)
       .filter((uid) => uid !== user.uid);
     const unique = [...new Set(otherUids)];
-    const newUids = unique.filter((uid) => !profileCache[uid]);
+    const newUids = unique.filter((uid) => !profileCacheRef.current[uid]);
     if (newUids.length === 0) return;
 
-    Promise.all(newUids.map((uid) => getProfile(uid))).then((profiles) => {
-      setProfileCache((prev) => {
-        const updated = { ...prev };
-        profiles.forEach((p) => {
-          if (p) updated[p.uid] = p;
+    setProfilesLoading(true);
+    Promise.all(newUids.map((uid) => getProfile(uid)))
+      .then((profiles) => {
+        setProfileCache((prev) => {
+          const updated = { ...prev };
+          profiles.forEach((p) => {
+            if (p) updated[p.uid] = p;
+          });
+          return updated;
         });
-        return updated;
+      })
+      .catch((err) => {
+        console.error("Failed to fetch connection profiles:", err);
+      })
+      .finally(() => {
+        setProfilesLoading(false);
       });
-    });
-  }, [user, connections]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, connections]);
 
   const incoming = connections.filter(
     (c) => c.status === "pending" && c.requesterId !== user?.uid
@@ -82,7 +96,7 @@ export default function Connections() {
     }
   };
 
-  if (loading) {
+  if (loading || profilesLoading) {
     return (
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
         <p className="text-gray-500">Loading connections...</p>
