@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { getMatches, sendConnectionRequest } from "../data/dataService";
 import type { UserProfile } from "../types";
 
@@ -11,7 +11,6 @@ export default function Matches() {
 
   useEffect(() => {
     if (!user) return;
-    setLoading(true);
     getMatches(user.uid).then((result) => {
       setMatches(result);
       setLoading(false);

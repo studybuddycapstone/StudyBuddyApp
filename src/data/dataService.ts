@@ -20,9 +20,9 @@ import {
 
 // --- Local demo state (only used in demo mode) ---
 
-let demoProfiles = [...seedProfiles];
+const demoProfiles = [...seedProfiles];
 let demoConnections = [...seedConnections];
-let demoMessages = [...seedMessages];
+const demoMessages = [...seedMessages];
 
 export { DEMO_USER_UID };
 

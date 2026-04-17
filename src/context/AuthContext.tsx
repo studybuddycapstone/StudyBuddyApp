@@ -1,28 +1,11 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, hasFirebaseConfig } from "../firebase/firebaseConfig";
 import { getProfile } from "../data/dataService";
-import { DEMO_USER_UID, seedProfiles } from "../data/seedData"; 
+import { DEMO_USER_UID, seedProfiles } from "../data/seedData";
 import type { UserProfile } from "../types";
-
-interface AuthContextType {
-  user: UserProfile | null;
-  loading: boolean;
-  isDemo: boolean;
-  refreshUser: () => Promise<void>;
-  loginAsDemo: () => Promise<void>;
-  logoutUser: () => void;
-}
-
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  isDemo: false,
-  refreshUser: async () => {},
-  loginAsDemo: async () => {},
-  logoutUser: () => {},
-});
+import { AuthContext } from "./useAuth";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -117,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFirebaseUid(null);
     setIsDemo(false);
     localStorage.removeItem("studybuddy_demo");
-    auth?.signOut().catch(() => {});
+    auth?.signOut().catch((err) => console.error("Sign-out failed:", err));
   };
 
   return (
@@ -127,6 +110,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}

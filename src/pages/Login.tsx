@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { login } from "../firebase/auth";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -20,8 +20,17 @@ export default function Login() {
     try {
       await login(email, password);
       navigate("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Login failed. Please try again.");
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === "auth/user-not-found") {
+        setError("No account found with this email.");
+      } else if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        setError("Incorrect password. Please try again.");
+      } else if (code === "auth/too-many-requests") {
+        setError("Too many attempts. Please try again later.");
+      } else {
+        setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -86,7 +95,6 @@ export default function Login() {
 
             <button
               type="submit"
-              onClick={handleLogin} 
               disabled={loading}
               className="w-full py-3 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition-colors disabled:opacity-50 cursor-pointer"
             >
