@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import {
   getConnectionsForUser,
   getProfile,
@@ -18,7 +18,6 @@ export default function Connections() {
 
   useEffect(() => {
     if (!user) return;
-    setLoading(true);
     getConnectionsForUser(user.uid).then(async (conns) => {
       setConnections(conns);
 

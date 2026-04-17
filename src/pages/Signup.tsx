@@ -30,8 +30,17 @@ export default function Signup() {
     try {
       await signUp(email, password, firstName, lastName);
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || "Signup failed. Please try again.");
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === "auth/email-already-in-use") {
+        setError("An account with this email already exists.");
+      } else if (code === "auth/weak-password") {
+        setError("Password is too weak. Please choose a stronger one.");
+      } else if (code === "auth/invalid-email") {
+        setError("Invalid email address.");
+      } else {
+        setError(err instanceof Error ? err.message : "Signup failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
