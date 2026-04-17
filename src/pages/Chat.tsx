@@ -21,6 +21,7 @@ export default function Chat() {
   const [otherUser, setOtherUser] = useState<UserProfile | undefined>();
   const [loading, setLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
     messages,
@@ -82,21 +83,29 @@ export default function Chat() {
     try {
       await clearMessages(connectionId);
       if (!hasFirebaseConfig) refetchMessages();
+      setActionError(null);
     } catch {
-      alert("Failed to clear messages. Please try again.");
+      setActionError("Failed to clear messages. Please try again.");
     }
   };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !connectionId) return;
+    const trimmedMessage = newMessage.trim();
+    const userId = user?.uid;
+    const canSendToConnection =
+      Boolean(connection) &&
+      connection?.status === "active" &&
+      connection?.participants.includes(userId ?? "");
+    if (!trimmedMessage || !connectionId || !canSendToConnection) return;
     try {
-      await sendMessage(connectionId, user.uid, newMessage.trim());
+      await sendMessage(connectionId, trimmedMessage);
       setNewMessage("");
       if (!hasFirebaseConfig) refetchMessages();
+      setActionError(null);
     } catch (error) {
       console.error("Failed to send message:", error);
-      alert("Failed to send message. Check console for details.");
+      setActionError("Failed to send message. Please try again.");
     }
   };
 
@@ -144,6 +153,10 @@ export default function Chat() {
     );
   }
 
+  const canSendToConnection =
+    connection.status === "active" &&
+    connection.participants.includes(user?.uid ?? "");
+
   return (
     <div className="h-full bg-green-50 flex flex-col overflow-hidden">
       {/* Chat header */}
@@ -187,6 +200,18 @@ export default function Chat() {
       {messagesError && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
           <p className="text-amber-700 text-xs">{messagesError}</p>
+        </div>
+      )}
+      {actionError && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <p className="text-amber-700 text-xs">{actionError}</p>
+        </div>
+      )}
+      {!canSendToConnection && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <p className="text-amber-700 text-xs">
+            You can only send messages in your own active conversations.
+          </p>
         </div>
       )}
 
@@ -247,11 +272,12 @@ export default function Chat() {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
+            disabled={!canSendToConnection}
             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
           <button
             type="submit"
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || !canSendToConnection}
             className="w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center hover:bg-green-700 transition-colors disabled:opacity-40 cursor-pointer shrink-0"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

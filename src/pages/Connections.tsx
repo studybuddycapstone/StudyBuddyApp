@@ -18,6 +18,7 @@ export default function Connections() {
   const profileCacheRef = useRef<Record<string, UserProfile>>({});
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const {
     connections,
@@ -62,13 +63,25 @@ export default function Connections() {
   };
 
   const handleAccept = async (connectionId: string) => {
-    await acceptConnection(connectionId);
-    if (!hasFirebaseConfig) refetchConnections();
+    try {
+      await acceptConnection(connectionId);
+      if (!hasFirebaseConfig) refetchConnections();
+      setActionError(null);
+    } catch (err) {
+      console.error("Failed to accept request:", err);
+      setActionError("Failed to accept request. Please try again.");
+    }
   };
 
   const handleDecline = async (connectionId: string) => {
-    await declineConnection(connectionId);
-    if (!hasFirebaseConfig) refetchConnections();
+    try {
+      await declineConnection(connectionId);
+      if (!hasFirebaseConfig) refetchConnections();
+      setActionError(null);
+    } catch (err) {
+      console.error("Failed to decline request:", err);
+      setActionError("Failed to decline request. Please try again.");
+    }
   };
 
   const handleRemoveConnection = async (connectionId: string) => {
@@ -77,8 +90,10 @@ export default function Connections() {
     try {
       await declineConnection(connectionId);
       if (!hasFirebaseConfig) refetchConnections();
-    } catch {
-      alert("Failed to remove connection. Please try again.");
+      setActionError(null);
+    } catch (err) {
+      console.error("Failed to remove connection:", err);
+      setActionError("Failed to remove connection. Please try again.");
     } finally {
       setRemoving(null);
     }
@@ -103,6 +118,11 @@ export default function Connections() {
         {connectionsError && (
           <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
             <p className="text-amber-700 text-xs">{connectionsError}</p>
+          </div>
+        )}
+        {actionError && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{actionError}</p>
           </div>
         )}
 

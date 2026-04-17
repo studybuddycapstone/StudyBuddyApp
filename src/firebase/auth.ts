@@ -25,7 +25,15 @@ export const login = async (email: string, password: string) => {
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
   if (!userCredential.user.emailVerified) {
-    throw new Error("Email not verified");
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Failed to clear unverified session:", error);
+    }
+
+    const verificationError = new Error("Email not verified") as Error & { code: string };
+    verificationError.code = "auth/email-not-verified";
+    throw verificationError;
   }
 
   return userCredential.user;

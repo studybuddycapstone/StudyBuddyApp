@@ -13,7 +13,7 @@ import {
   onSnapshot,
   FirestoreError,
 } from "firebase/firestore";
-import { db } from "./firebaseConfig";
+import { auth, db } from "./firebaseConfig";
 import type { UserProfile, Connection, Message } from "../types";
 
 export async function createProfile(
@@ -64,19 +64,31 @@ export async function fetchConnectionsForUser(uid: string): Promise<Connection[]
 }
 
 export async function createConnectionRequest(
-  requesterId: string,
   receiverId: string
 ): Promise<Connection> {
   if (!db) throw new Error("Firestore not available");
+  const requesterId = auth?.currentUser?.uid;
+  if (!requesterId) {
+    throw new Error("Cannot create connection request: authenticated user is required");
+  }
+  const normalizedReceiverId = receiverId.trim();
+  if (!normalizedReceiverId) {
+    throw new Error("Cannot create connection request: receiver ID is required");
+  }
+  if (requesterId === normalizedReceiverId) {
+    throw new Error("Cannot create connection request to yourself");
+  }
 
   const existing = await fetchConnectionsForUser(requesterId);
   const found = existing.find(
-    (c) => c.participants.includes(requesterId) && c.participants.includes(receiverId)
+    (c) =>
+      c.participants.includes(requesterId) &&
+      c.participants.includes(normalizedReceiverId)
   );
   if (found) return found;
 
   const conn: Omit<Connection, "id"> = {
-    participants: [requesterId, receiverId],
+    participants: [requesterId, normalizedReceiverId],
     requesterId,
     status: "pending",
     createdAt: Date.now(),
@@ -109,14 +121,37 @@ export async function fetchMessages(connectionId: string): Promise<Message[]> {
 
 export async function createMessage(
   connectionId: string,
-  senderId: string,
   text: string
 ): Promise<Message> {
   if (!db) throw new Error("Firestore not available");
+  const senderId = auth?.currentUser?.uid;
+  if (!senderId) {
+    throw new Error("Cannot send message: authenticated user is required");
+  }
+  const normalizedConnectionId = connectionId.trim();
+  const normalizedText = text.trim();
+  if (!normalizedConnectionId) {
+    throw new Error("Cannot send message: connection ID is required");
+  }
+  if (!normalizedText) {
+    throw new Error("Cannot send message: text is required");
+  }
+  const connectionSnap = await getDoc(doc(db, "connections", normalizedConnectionId));
+  const connection = connectionSnap.exists()
+    ? ({ id: connectionSnap.id, ...connectionSnap.data() } as Connection)
+    : undefined;
+  const hasPermission =
+    connection?.status === "active" &&
+    connection.participants.includes(senderId);
+  if (!hasPermission) {
+    throw new Error(
+      "Permission denied: you can only send messages in your own active connections"
+    );
+  }
   const msg: Omit<Message, "id"> = {
-    connectionId,
+    connectionId: normalizedConnectionId,
     senderId,
-    text,
+    text: normalizedText,
     timestamp: Date.now(),
   };
   const ref = await addDoc(collection(db, "messages"), msg);

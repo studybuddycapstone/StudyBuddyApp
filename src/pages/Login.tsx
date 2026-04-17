@@ -24,6 +24,8 @@ export default function Login() {
       const code = (err as { code?: string }).code;
       if (code === "auth/user-not-found") {
         setError("No account found with this email.");
+      } else if (code === "auth/email-not-verified") {
+        setError("Please verify your email before signing in.");
       } else if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setError("Incorrect password. Please try again.");
       } else if (code === "auth/too-many-requests") {

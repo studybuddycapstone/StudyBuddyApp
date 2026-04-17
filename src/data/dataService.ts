@@ -97,22 +97,30 @@ export async function getConnectionsForUser(uid: string): Promise<Connection[]> 
 }
 
 export async function sendConnectionRequest(
-  requesterId: string,
   receiverId: string
 ): Promise<Connection> {
+  const normalizedReceiverId = receiverId.trim();
+  if (!normalizedReceiverId) {
+    throw new Error("Receiver ID is required");
+  }
+
   if (hasFirebaseConfig) {
-    return createConnectionRequest(requesterId, receiverId);
+    return createConnectionRequest(normalizedReceiverId);
+  }
+  const requesterId = DEMO_USER_UID;
+  if (requesterId === normalizedReceiverId) {
+    throw new Error("Cannot send a connection request to yourself");
   }
   const existing = demoConnections.find(
     (c) =>
       c.participants.includes(requesterId) &&
-      c.participants.includes(receiverId)
+      c.participants.includes(normalizedReceiverId)
   );
   if (existing) return existing;
 
   const conn: Connection = {
     id: `conn-${Date.now()}`,
-    participants: [requesterId, receiverId],
+    participants: [requesterId, normalizedReceiverId],
     requesterId,
     status: "pending",
     createdAt: Date.now(),
@@ -151,17 +159,35 @@ export async function getMessages(connectionId: string): Promise<Message[]> {
 
 export async function sendMessage(
   connectionId: string,
-  senderId: string,
   text: string
 ): Promise<Message> {
+  const normalizedConnectionId = connectionId.trim();
+  const normalizedText = text.trim();
+  if (!normalizedConnectionId) {
+    throw new Error("Connection ID is required");
+  }
+  if (!normalizedText) {
+    throw new Error("Message text is required");
+  }
+
   if (hasFirebaseConfig) {
-    return createMessage(connectionId, senderId, text);
+    return createMessage(normalizedConnectionId, normalizedText);
+  }
+  const senderId = DEMO_USER_UID;
+  const connection = demoConnections.find((c) => c.id === normalizedConnectionId);
+  const hasPermission =
+    connection?.status === "active" &&
+    connection.participants.includes(senderId);
+  if (!hasPermission) {
+    throw new Error(
+      "Permission denied: you can only send messages in your own active connections"
+    );
   }
   const msg: Message = {
     id: `msg-${Date.now()}`,
-    connectionId,
+    connectionId: normalizedConnectionId,
     senderId,
-    text,
+    text: normalizedText,
     timestamp: Date.now(),
   };
   demoMessages.push(msg);

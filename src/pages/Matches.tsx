@@ -10,19 +10,51 @@ export default function Matches() {
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
-    getMatches(user.uid).then((result) => {
-      setMatches(result);
+    if (!user) {
       setLoading(false);
-    });
+      return;
+    }
+
+    let mounted = true;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const result = await getMatches(user.uid);
+        if (mounted) {
+          setMatches(result);
+          setError(null);
+        }
+      } catch (err) {
+        console.error("Failed to load matches:", err);
+        if (mounted) {
+          setMatches([]);
+          setError("Failed to load matches. Please try again.");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   const handleConnect = async (matchUid: string) => {
-    if (!user) return;
-    await sendConnectionRequest(user.uid, matchUid);
-    setSentRequests(new Set([...sentRequests, matchUid]));
+    const normalizedMatchUid = matchUid.trim();
+    if (!user || !normalizedMatchUid) return;
+    try {
+      await sendConnectionRequest(normalizedMatchUid);
+      setSentRequests(new Set([...sentRequests, normalizedMatchUid]));
+      setError(null);
+    } catch (err) {
+      console.error("Failed to send connection request:", err);
+      setError("Failed to send request. Please try again.");
+    }
   };
 
   if (loading) {
@@ -40,6 +72,12 @@ export default function Matches() {
         <p className="text-gray-500 mb-8">
           Students who share classes with you, ranked by the most overlap.
         </p>
+
+        {error && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{error}</p>
+          </div>
+        )}
 
         {matches.length === 0 ? (
           <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center">

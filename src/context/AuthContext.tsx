@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, hasFirebaseConfig } from "../firebase/firebaseConfig";
@@ -12,6 +12,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
+  const isSigningOutUnverified = useRef(false);
 
   // Fetch profile from Firestore for a given UID
   const loadProfile = async (uid: string) => {
@@ -35,14 +36,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Try Firebase auth if configured
     if (hasFirebaseConfig && auth) {
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const firebaseAuth = auth;
+      unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
         if (firebaseUser) {
+          if (!firebaseUser.emailVerified) {
+            setFirebaseUid(null);
+            setUser(null);
+            setIsDemo(false);
+
+            if (!isSigningOutUnverified.current) {
+              isSigningOutUnverified.current = true;
+              firebaseAuth
+                .signOut()
+                .catch((err) => console.error("Sign-out failed for unverified user:", err))
+                .finally(() => {
+                  isSigningOutUnverified.current = false;
+                });
+            }
+
+            setLoading(false);
+            return;
+          }
+
           setFirebaseUid(firebaseUser.uid);
           setIsDemo(false);
           await loadProfile(firebaseUser.uid);
         } else {
           setFirebaseUid(null);
           setUser(null);
+          setIsDemo(false);
         }
         setLoading(false);
       });
@@ -109,4 +131,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
-

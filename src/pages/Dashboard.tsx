@@ -41,10 +41,31 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    getConnectionsForUser(user.uid).then(setConnections);
+    let mounted = true;
+
+    (async () => {
+      try {
+        const result = await getConnectionsForUser(user.uid);
+        if (mounted) {
+          setConnections(result);
+          setConnectionsError(null);
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard connections:", err);
+        if (mounted) {
+          setConnections([]);
+          setConnectionsError("We couldn't load your latest connection activity.");
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   const activeCount = connections.filter((c) => c.status === "active").length;
@@ -63,6 +84,12 @@ export default function Dashboard() {
             Here's your study hub. What would you like to do today?
           </p>
         </div>
+
+        {connectionsError && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg mb-4 text-center">
+            <p className="text-amber-700 text-xs">{connectionsError}</p>
+          </div>
+        )}
 
         {pendingCount > 0 && (
           <div
