@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   onSnapshot,
+  FirestoreError,
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import type { UserProfile, Connection, Message } from "../types";
@@ -135,7 +136,7 @@ export async function deleteMessages(connectionId: string): Promise<void> {
 export function subscribeToMessages(
   connectionId: string,
   onData: (msgs: Message[]) => void,
-  onError: (err: Error) => void
+  onError: (err: FirestoreError) => void
 ): () => void {
   if (!db) return () => {};
   const q = query(
@@ -153,7 +154,7 @@ export function subscribeToMessages(
 export function subscribeToConnections(
   uid: string,
   onData: (conns: Connection[]) => void,
-  onError: (err: Error) => void
+  onError: (err: FirestoreError) => void
 ): () => void {
   if (!db) return () => {};
   const q = query(
