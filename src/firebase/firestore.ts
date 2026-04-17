@@ -120,3 +120,13 @@ export async function createMessage(
   const ref = await addDoc(collection(db, "messages"), msg);
   return { ...msg, id: ref.id };
 }
+
+export async function deleteMessages(connectionId: string): Promise<void> {
+  if (!db) throw new Error("Firestore not available");
+  const q = query(
+    collection(db, "messages"),
+    where("connectionId", "==", connectionId)
+  );
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}

@@ -10,6 +10,7 @@ import {
   declineConnectionRequest,
   fetchMessages,
   createMessage,
+  deleteMessages,
 } from "../firebase/firestore";
 import {
   seedProfiles,
@@ -165,4 +166,13 @@ export async function sendMessage(
   };
   demoMessages.push(msg);
   return msg;
+}
+
+export async function clearMessages(connectionId: string): Promise<void> {
+  if (hasFirebaseConfig) {
+    await deleteMessages(connectionId);
+    return;
+  }
+  const remaining = demoMessages.filter((m) => m.connectionId !== connectionId);
+  demoMessages.splice(0, demoMessages.length, ...remaining);
 }

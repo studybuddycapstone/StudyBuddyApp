@@ -4,6 +4,7 @@ import { useAuth } from "../context/useAuth";
 import {
   getMessages,
   sendMessage,
+  clearMessages,
   getConnectionsForUser,
   getProfile,
 } from "../data/dataService";
@@ -65,6 +66,17 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleClearMessages = async () => {
+    if (!connectionId) return;
+    if (!confirm("Clear all messages in this conversation? This cannot be undone.")) return;
+    try {
+      await clearMessages(connectionId);
+      setMessages([]);
+    } catch {
+      alert("Failed to clear messages. Please try again.");
+    }
+  };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +165,14 @@ export default function Chat() {
               {otherUser.major && <p className="text-xs text-gray-500">{otherUser.major}</p>}
             </div>
           </button>
+          <div className="ml-auto">
+            <button
+              onClick={handleClearMessages}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors cursor-pointer bg-transparent border-none"
+            >
+              Clear
+            </button>
+          </div>
         </div>
       </div>
 
