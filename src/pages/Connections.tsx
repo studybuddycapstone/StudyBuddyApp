@@ -17,6 +17,7 @@ export default function Connections() {
   const [profileCache, setProfileCache] = useState<Record<string, UserProfile>>({});
   const [loading, setLoading] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -61,6 +62,19 @@ export default function Connections() {
   const handleDecline = async (connectionId: string) => {
     await declineConnection(connectionId);
     setConnections((prev) => prev.filter((c) => c.id !== connectionId));
+  };
+
+  const handleRemoveConnection = async (connectionId: string) => {
+    if (!confirm("Remove this connection? This cannot be undone.")) return;
+    setRemoving(connectionId);
+    try {
+      await declineConnection(connectionId);
+      setConnections((prev) => prev.filter((c) => c.id !== connectionId));
+    } catch {
+      alert("Failed to remove connection. Please try again.");
+    } finally {
+      setRemoving(null);
+    }
   };
 
   if (loading) {
@@ -219,12 +233,21 @@ export default function Connections() {
                         </div>
                       </div>
                     </button>
-                    <button
-                      onClick={() => navigate(`/chat/${conn.id}`)}
-                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-full hover:bg-green-700 transition-colors cursor-pointer"
-                    >
-                      Message
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate(`/chat/${conn.id}`)}
+                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-full hover:bg-green-700 transition-colors cursor-pointer"
+                      >
+                        Message
+                      </button>
+                      <button
+                        onClick={() => handleRemoveConnection(conn.id)}
+                        disabled={removing === conn.id}
+                        className="px-4 py-2 bg-white text-red-500 text-sm font-medium rounded-full border border-red-200 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {removing === conn.id ? "Removing..." : "Remove"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
